@@ -12,3 +12,8 @@ pub struct Tick {
     pub received_ts: SystemTime
 }
 
+#[derive(Debug, Clone, Copy)]
+enum AggressorSide {
+    Buy,
+    Sell
+}
