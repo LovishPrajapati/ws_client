@@ -13,7 +13,7 @@ pub struct Tick {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum AggressorSide {
+pub enum AggressorSide {
     Buy,
     Sell
 }
