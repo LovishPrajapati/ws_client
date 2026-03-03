@@ -10,31 +10,60 @@ pub async fn start_producer(
     url: String,
     parser: Box<dyn ExchangeParser>,
     tx: mpsc::Sender<Tick>,
+    mut shutdown: tokio::sync::broadcast::Receiver<()>,
 ) {
-
     loop {
-        match connect(&url).await {
-            Ok(ws_stream) => {
-                let (_, mut read) = ws_stream.split();
+        tokio::select! {
+        _ = shutdown.recv() => {
+            println!("Shutting down producer");
+            return;
+        }
 
-                while let Some(msg) = read.next().await {
-                    if let Ok(msg) = msg {
-                        if msg.is_text() {
-                            if let Ok(Some(tick)) =
-                                parser.parse(msg.to_text().unwrap())
-                            {
-                                if tx.send(tick).await.is_err() {
-                                    return;
+        result = connect(&url) => {
+            match result {
+                Ok(ws_stream) => {
+                    let (_, mut read) = ws_stream.split();
+
+                    loop {
+                        tokio::select! {
+                            _ = shutdown.recv() => {
+                                println!("Shutting down producer");
+                                return;
+                            }
+
+                            msg = read.next() => {
+                                match msg {
+                                    Some(Ok(msg)) if msg.is_text() => {
+                                        if let Ok(Some(tick)) =
+                                            parser.parse(msg.to_text().unwrap())
+                                        {
+                                            if tx.send(tick).await.is_err() {
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    Some(Err(_)) => break,
+                                    None => break,
+                                    _ => {}
                                 }
                             }
                         }
                     }
                 }
-            }
-            Err(e) => {
-                eprintln!("Reconnect error: {:?}", e);
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+                Err(e) => {
+                    eprintln!("Reconnect error: {:?}", e);
+
+                    tokio::select! {
+                        _ = shutdown.recv() => {
+                            println!("Shutting down producer");
+                            return;
+                        }
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(2)) => {}
+                    }
+                }
             }
         }
+    }
     }
 }

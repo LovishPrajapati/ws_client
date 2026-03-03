@@ -6,7 +6,7 @@ mod transport;
 mod producer;
 mod ingestion;
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, broadcast};
 use tokio::signal;
 use tracing::info;
 use tracing_subscriber;
@@ -27,6 +27,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Bounded channel → defines backpressure
     let (tx, mut rx) = mpsc::channel::<Tick>(200_000);
+    let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
     // ==========================
     // Spawn Producers
@@ -40,9 +41,10 @@ async fn main() -> anyhow::Result<()> {
     for url in producer_urls {
         let tx_clone = tx.clone();
         let parser = Box::new(BinanceParser);
+        let shutdown_rx = shutdown_tx.subscribe();
 
         tokio::spawn(async move {
-            start_producer(url.to_string(), parser, tx_clone).await;
+            start_producer(url.to_string(), parser, tx_clone,shutdown_rx).await;
         });
     }
 
@@ -80,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
     tokio::select! {
         _ = signal::ctrl_c() => {
             info!("Shutdown signal received");
+             shutdown_tx.send(()).ok();
         }
     }
 
