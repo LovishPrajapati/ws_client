@@ -1,6 +1,6 @@
 use crate::model::tick::Tick;
 
-pub enum CandleEvent{
+pub enum CandleEvent {
     Tick(Tick),
-    MinuteClose(u64)
+    MinuteClose(u64),
 }

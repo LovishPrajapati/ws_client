@@ -1,5 +1,5 @@
+use crate::model::tick::{AggressorSide, Tick};
 use serde::Deserialize;
-use crate::model::tick::{Tick,AggressorSide};
 use std::time::SystemTime;
 
 #[derive(Deserialize, Debug)]
@@ -24,7 +24,6 @@ pub struct BinanceParser;
 
 impl super::traits::ExchangeParser for BinanceParser {
     fn parse(&self, text: &str) -> anyhow::Result<Option<Tick>> {
-
         let event: AggTradeEvent = match serde_json::from_str(text) {
             Ok(v) => v,
             Err(_) => return Ok(None),

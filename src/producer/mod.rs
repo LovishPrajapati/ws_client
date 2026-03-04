@@ -1,2 +1,2 @@
-pub mod task;
 pub mod candle_worker;
+pub mod task;

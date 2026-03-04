@@ -1,7 +1,7 @@
-
+use serde::Serialize;
 use std::time::SystemTime;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Tick {
     pub symbol: String,
     pub price: f64,
@@ -9,11 +9,11 @@ pub struct Tick {
     pub trade_id: u64,
     pub side: AggressorSide,
     pub exchange_ts: u64,
-    pub received_ts: SystemTime
+    pub received_ts: SystemTime,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize)]
 pub enum AggressorSide {
     Buy,
-    Sell
+    Sell,
 }

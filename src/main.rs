@@ -1,22 +1,23 @@
 // src/main.rs
 
-mod model;
-mod exchange;
-mod transport;
-mod producer;
 mod analytics;
+mod exchange;
+mod kafka;
+mod model;
+mod producer;
+mod transport;
 
-use tokio::sync::{mpsc, broadcast};
-use tokio::signal;
-use tracing::info;
-use tracing_subscriber;
-use std::collections::HashMap;
-use std::time::{Duration, SystemTime,UNIX_EPOCH};
-use tokio::time::interval;
-use crate::model::tick::Tick;
-use crate::producer::task::start_producer;
 use crate::exchange::binance::BinanceParser;
 use crate::model::event::CandleEvent;
+use crate::model::tick::Tick;
+use crate::producer::task::start_producer;
+use std::collections::HashMap;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::signal;
+use tokio::sync::{broadcast, mpsc};
+use tokio::time::interval;
+use tracing::info;
+use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -25,146 +26,7 @@ async fn main() -> anyhow::Result<()> {
         .with_target(false)
         .compact()
         .init();
-    let symbols = vec![
-        "btcusdt",
-        "dogeusdt",
-        "dotusdt",
-        "arbusdt",
-        "bnbusdt",
-        "edusdt",
-        "solusdt",
-        "suiusdt",
-        "xrpusdt",
-        "linkusdt",
-        "aaveusdt",
-        "ldousdt",
-        "bchusdt",
-        "crvusdt",
-        "ltcusdt",
-        "atomusdt",
-        "sandusdt",
-        "opusdt",
-        "uniusdt",
-        "wldusdt",
-        "trbusdt",
-        "storjusdt",
-        "pythusdt",
-        "apeusdt",
-        "cyberusdt",
-        "kavausdt",
-        "seiusdt",
-        "spellusdt",
-        "adausdt",
-        "zecusdt",
-        "joeusdt",
-        "avaxusdt",
-        "aptusdt",
-        "trxusdt",
-        "nearusdt",
-        "1000bonkusdt",
-        "1000pepeusdt",
-        "1000shibusdt",
-        "filusdt",
-        "api3usdt",
-        "icpusdt",
-        "rdntusdt",
-        "minausdt",
-        "mavusdt",
-        "sklusdt",
-        "injusdt",
-        "movrusdt",
-        "aliceusdt",
-        "axsusdt",
-        "bandusdt",
-        "batusdt",
-        "blurusdt",
-        "roseusdt",
-        "snxusdt",
-        "gmtusdt",
-        "stxusdt",
-        "sushiusdt",
-        "dydxusdt",
-        "runeusdt",
-        "galausdt",
-        "yggusdt",
-        "etcusdt",
-        "bicousdt",
-        "chzusdt",
-        "tiausdt",
-        "ordiusdt",
-        "pendleusdt",
-        "fetusdt",
-        "woousdt",
-        "enjusdt",
-        "superusdt",
-        "arkusdt",
-        "altusdt",
-        "lskusdt",
-        "jtousdt",
-        "wifusdt",
-        "mantausdt",
-        "xaiusdt",
-        "umausdt",
-        "ondousdt",
-        "jupusdt",
-        "1000satsusdt",
-        "compusdt",
-        "egldusdt",
-        "tonusdt",
-        "algousdt",
-        "gmxusdt",
-        "cotiusdt",
-        "zetausdt",
-        "strkusdt",
-        "dymusdt",
-        "roninusdt",
-        "portalusdt",
-        "cfxusdt",
-        "imxusdt",
-        "pixelusdt",
-        "beamxusdt",
-        "1000flokiusdt",
-        "memeusdt",
-        "maskusdt",
-        "manausdt",
-        "peopleusdt",
-        "arkmusdt",
-        "bomeusdt",
-        "arusdt",
-        "bigtimeusdt",
-        "zrxusdt",
-        "polyxusdt",
-        "grtusdt",
-        "ensusdt",
-        "thetausdt",
-        "xlmusdt",
-        "rsrusdt",
-        "aceusdt",
-        "nfpusdt",
-        "aiusdt",
-        "kasusdt",
-        "idusdt",
-        "1000luncusdt",
-        "hbarusdt",
-        "zilusdt",
-        "aevousdt",
-        "glmusdt",
-        "metisusdt",
-        "axlusdt",
-        "ethfiusdt",
-        "vanryusdt",
-        "renderusdt",
-        "notusdt",
-        "popcatusdt",
-        "taousdt",
-        "turbousdt",
-        "brettusdt",
-        "mewusdt",
-        "enausdt",
-        "zrousdt",
-        "c98usdt",
-        "lrcusdt",
-    ];
+    let symbols = vec!["btcusdt", "dogeusdt", "dotusdt", "arbusdt", "bnbusdt"];
 
     info!("Starting Market Data Ingestion System");
 
@@ -178,8 +40,11 @@ async fn main() -> anyhow::Result<()> {
 
     let mut producer_urls = Vec::with_capacity(symbols.len());
 
-    for symbol in symbols{
-        producer_urls.push(format!("wss://stream.binance.com:9443/ws/{0}@aggTrade", symbol));
+    for symbol in symbols {
+        producer_urls.push(format!(
+            "wss://stream.binance.com:9443/ws/{0}@aggTrade",
+            symbol
+        ));
     }
 
     for url in producer_urls {
@@ -188,14 +53,13 @@ async fn main() -> anyhow::Result<()> {
         let shutdown_rx = shutdown_tx.subscribe();
 
         tokio::spawn(async move {
-            start_producer(url.to_string(), parser, tx_clone,shutdown_rx).await;
+            start_producer(url.to_string(), parser, tx_clone, shutdown_rx).await;
         });
     }
 
     drop(tx); // Important: allow channel to close cleanly
 
     let router_handle = tokio::spawn(async move {
-
         let mut symbol_workers: HashMap<String, mpsc::Sender<CandleEvent>> = HashMap::new();
 
         let mut timer = interval(Duration::from_secs(1));
@@ -218,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
                 Some(tick) = rx.recv() => {
                     let symbol = tick.symbol.clone();
                     let entry = symbol_workers.entry(symbol.clone());
+                    let (kafka_tx, kafka_rx) = mpsc::channel::<Tick>(200_000);
 
                     let symbol_tx = entry.or_insert_with(|| {
 
@@ -228,11 +93,15 @@ async fn main() -> anyhow::Result<()> {
                         producer::candle_worker::start_candle_worker(symbol, rx_symbol).await;
                     });
 
+
                     tx_symbol
                 });
-             let _ = symbol_tx.send(CandleEvent::Tick(tick)).await;
-
-            }
+                     tokio::spawn(async move {
+                        kafka::producer::start_kafka_producer(kafka_rx).await;
+                    });
+                    let _ = symbol_tx.send(CandleEvent::Tick(tick.clone())).await;
+                    let _ = kafka_tx.send(tick).await;
+                }
             }
         }
     });

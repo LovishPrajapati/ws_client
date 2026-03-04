@@ -1,5 +1,5 @@
 #[derive(Debug, Clone)]
-pub struct Candle{
+pub struct Candle {
     pub symbol: String,
     pub open_time: u64,
     pub open: f64,
