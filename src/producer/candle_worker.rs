@@ -1,69 +1,55 @@
-use std::time::SystemTime;
 use tokio::sync::mpsc;
-use crate::model::{tick::Tick, candle::Candle};
 use crate::model::event::CandleEvent;
-use chrono::Utc;
+use crate::analytics::candle_aggregator::CandleAggregator;
 
 pub async fn start_candle_worker(
-    symbol: String,
+    _symbol: String,
     mut rx: mpsc::Receiver<CandleEvent>,
 ) {
-    let mut current: Option<Candle> = None;
+    let mut agg_1m  = CandleAggregator::new(60_000);
+    let mut agg_5m  = CandleAggregator::new(300_000);
+    let mut agg_15m = CandleAggregator::new(900_000);
+    let mut agg_1h  = CandleAggregator::new(3_600_000);
 
     while let Some(event) = rx.recv().await {
-
         match event {
-
             CandleEvent::Tick(tick) => {
+                if let Some(c1) = agg_1m.update(&tick) {
 
-                let bucket = (tick.exchange_ts / 60_000) * 60_000;
+                    println!("1m candle closed {:?}", c1);
 
-                match &mut current {
-
-                    Some(c) if c.open_time == bucket => {
-                        c.high = c.high.max(tick.price);
-                        c.low = c.low.min(tick.price);
-                        c.close = tick.price;
-                        c.volume += tick.quantity * tick.price;
+                    if let Some(c5) = agg_5m.update_from_candle(&c1) {
+                        println!("5m candle closed {:?}", c5);
                     }
 
-                    Some(c) => {
-                        println!("CLOSED: {:?}", c);
-
-                        current = Some(Candle {
-                            symbol: symbol.clone(),
-                            open_time: bucket,
-                            open: tick.price,
-                            high: tick.price,
-                            low: tick.price,
-                            close: tick.price,
-                            volume: tick.quantity * tick.price,
-                        });
+                    if let Some(c15) = agg_15m.update_from_candle(&c1) {
+                        println!("15m candle closed {:?}", c15);
                     }
 
-                    None => {
-                        current = Some(Candle {
-                            symbol: symbol.clone(),
-                            open_time: bucket,
-                            open: tick.price,
-                            high: tick.price,
-                            low: tick.price,
-                            close: tick.price,
-                            volume: tick.quantity * tick.price,
-                        });
+                    if let Some(c1h) = agg_1h.update_from_candle(&c1) {
+                        println!("1h candle closed {:?}", c1h);
                     }
                 }
             }
 
-            CandleEvent::MinuteClose(minute) => {
+            CandleEvent::MinuteClose(ts) => {
 
-                if let Some(c) = &current {
-                    if c.open_time < minute {
-                        println!("CLOSED BY TIMER:{:?} {:?}", Utc::now() ,c);
-                        current = None;
+                if let Some(c1) = agg_1m.force_close(ts) {
+
+                    println!("1m closed by timer {:?}", c1);
+
+                    if let Some(c5) = agg_5m.update_from_candle(&c1) {
+                        println!("5m closed {:?}", c5);
+                    }
+
+                    if let Some(c15) = agg_15m.update_from_candle(&c1) {
+                        println!("15m closed {:?}", c15);
+                    }
+
+                    if let Some(c1h) = agg_1h.update_from_candle(&c1) {
+                        println!("1h closed {:?}", c1h);
                     }
                 }
-
             }
         }
     }

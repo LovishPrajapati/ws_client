@@ -4,6 +4,7 @@ mod model;
 mod exchange;
 mod transport;
 mod producer;
+mod analytics;
 
 use tokio::sync::{mpsc, broadcast};
 use tokio::signal;
