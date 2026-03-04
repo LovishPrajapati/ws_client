@@ -1,7 +1,7 @@
 // producer/task.rs
 
 use tokio::sync::mpsc;
-use futures_util::StreamExt;
+use futures_util::{StreamExt};
 use crate::model::tick::Tick;
 use crate::exchange::traits::ExchangeParser;
 use crate::transport::websocket::connect;
@@ -23,7 +23,6 @@ pub async fn start_producer(
             match result {
                 Ok(ws_stream) => {
                     let (_, mut read) = ws_stream.split();
-
                     loop {
                         tokio::select! {
                             _ = shutdown.recv() => {

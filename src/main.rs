@@ -4,16 +4,18 @@ mod model;
 mod exchange;
 mod transport;
 mod producer;
-mod ingestion;
 
 use tokio::sync::{mpsc, broadcast};
 use tokio::signal;
 use tracing::info;
 use tracing_subscriber;
-
+use std::collections::HashMap;
+use std::time::{Duration, SystemTime,UNIX_EPOCH};
+use tokio::time::interval;
 use crate::model::tick::Tick;
 use crate::producer::task::start_producer;
 use crate::exchange::binance::BinanceParser;
+use crate::model::event::CandleEvent;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -22,6 +24,146 @@ async fn main() -> anyhow::Result<()> {
         .with_target(false)
         .compact()
         .init();
+    let symbols = vec![
+        "btcusdt",
+        "dogeusdt",
+        "dotusdt",
+        "arbusdt",
+        "bnbusdt",
+        "edusdt",
+        "solusdt",
+        "suiusdt",
+        "xrpusdt",
+        "linkusdt",
+        "aaveusdt",
+        "ldousdt",
+        "bchusdt",
+        "crvusdt",
+        "ltcusdt",
+        "atomusdt",
+        "sandusdt",
+        "opusdt",
+        "uniusdt",
+        "wldusdt",
+        "trbusdt",
+        "storjusdt",
+        "pythusdt",
+        "apeusdt",
+        "cyberusdt",
+        "kavausdt",
+        "seiusdt",
+        "spellusdt",
+        "adausdt",
+        "zecusdt",
+        "joeusdt",
+        "avaxusdt",
+        "aptusdt",
+        "trxusdt",
+        "nearusdt",
+        "1000bonkusdt",
+        "1000pepeusdt",
+        "1000shibusdt",
+        "filusdt",
+        "api3usdt",
+        "icpusdt",
+        "rdntusdt",
+        "minausdt",
+        "mavusdt",
+        "sklusdt",
+        "injusdt",
+        "movrusdt",
+        "aliceusdt",
+        "axsusdt",
+        "bandusdt",
+        "batusdt",
+        "blurusdt",
+        "roseusdt",
+        "snxusdt",
+        "gmtusdt",
+        "stxusdt",
+        "sushiusdt",
+        "dydxusdt",
+        "runeusdt",
+        "galausdt",
+        "yggusdt",
+        "etcusdt",
+        "bicousdt",
+        "chzusdt",
+        "tiausdt",
+        "ordiusdt",
+        "pendleusdt",
+        "fetusdt",
+        "woousdt",
+        "enjusdt",
+        "superusdt",
+        "arkusdt",
+        "altusdt",
+        "lskusdt",
+        "jtousdt",
+        "wifusdt",
+        "mantausdt",
+        "xaiusdt",
+        "umausdt",
+        "ondousdt",
+        "jupusdt",
+        "1000satsusdt",
+        "compusdt",
+        "egldusdt",
+        "tonusdt",
+        "algousdt",
+        "gmxusdt",
+        "cotiusdt",
+        "zetausdt",
+        "strkusdt",
+        "dymusdt",
+        "roninusdt",
+        "portalusdt",
+        "cfxusdt",
+        "imxusdt",
+        "pixelusdt",
+        "beamxusdt",
+        "1000flokiusdt",
+        "memeusdt",
+        "maskusdt",
+        "manausdt",
+        "peopleusdt",
+        "arkmusdt",
+        "bomeusdt",
+        "arusdt",
+        "bigtimeusdt",
+        "zrxusdt",
+        "polyxusdt",
+        "grtusdt",
+        "ensusdt",
+        "thetausdt",
+        "xlmusdt",
+        "rsrusdt",
+        "aceusdt",
+        "nfpusdt",
+        "aiusdt",
+        "kasusdt",
+        "idusdt",
+        "1000luncusdt",
+        "hbarusdt",
+        "zilusdt",
+        "aevousdt",
+        "glmusdt",
+        "metisusdt",
+        "axlusdt",
+        "ethfiusdt",
+        "vanryusdt",
+        "renderusdt",
+        "notusdt",
+        "popcatusdt",
+        "taousdt",
+        "turbousdt",
+        "brettusdt",
+        "mewusdt",
+        "enausdt",
+        "zrousdt",
+        "c98usdt",
+        "lrcusdt",
+    ];
 
     info!("Starting Market Data Ingestion System");
 
@@ -33,10 +175,11 @@ async fn main() -> anyhow::Result<()> {
     // Spawn Producers
     // ==========================
 
-    let producer_urls = vec![
-        "wss://stream.binance.com:9443/ws/btcusdt@aggTrade",
-        "wss://stream.binance.com:9443/ws/ethusdt@aggTrade",
-    ];
+    let mut producer_urls = Vec::with_capacity(symbols.len());
+
+    for symbol in symbols{
+        producer_urls.push(format!("wss://stream.binance.com:9443/ws/{0}@aggTrade", symbol));
+    }
 
     for url in producer_urls {
         let tx_clone = tx.clone();
@@ -50,29 +193,47 @@ async fn main() -> anyhow::Result<()> {
 
     drop(tx); // Important: allow channel to close cleanly
 
-    // ==========================
-    // Aggregator Task
-    // ==========================
+    let router_handle = tokio::spawn(async move {
 
-    let aggregator_handle = tokio::spawn(async move {
-        let mut total_ticks: u64 = 0;
+        let mut symbol_workers: HashMap<String, mpsc::Sender<CandleEvent>> = HashMap::new();
 
-        while let Some(tick) = rx.recv().await {
-            total_ticks += 1;
+        let mut timer = interval(Duration::from_secs(1));
 
-            // Replace this with:
-            // - Time-series engine
-            // - Router
-            // - Kafka writer
-            // - Analytics engine
-            info!("{:?}", tick);
+        loop {
+            tokio::select! {
+                _ = timer.tick() => {
+                     let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64;
 
-            if total_ticks % 10_000 == 0 {
-                info!("Processed {} ticks", total_ticks);
+                let minute_close = (now / 60_000) * 60_000;
+
+                for tx in symbol_workers.values() {
+                    let _ = tx.send(CandleEvent::MinuteClose(minute_close)).await;
+                }
+                }
+
+                Some(tick) = rx.recv() => {
+                    let symbol = tick.symbol.clone();
+                    let entry = symbol_workers.entry(symbol.clone());
+
+                    let symbol_tx = entry.or_insert_with(|| {
+
+                    let (tx_symbol, rx_symbol) = mpsc::channel::<CandleEvent>(10_000);
+                    let symbol = tick.symbol.clone();
+
+                    tokio::spawn(async move {
+                        producer::candle_worker::start_candle_worker(symbol, rx_symbol).await;
+                    });
+
+                    tx_symbol
+                });
+             let _ = symbol_tx.send(CandleEvent::Tick(tick)).await;
+
+            }
             }
         }
-
-        info!("Aggregator shutting down");
     });
 
     // ==========================
@@ -86,8 +247,9 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    info!("Waiting for aggregator to finish...");
-    aggregator_handle.await?;
+    // info!("Waiting for aggregator to finish...");
+    // aggregator_handle.await?;
+    router_handle.await?;
 
     info!("System terminated cleanly");
 
